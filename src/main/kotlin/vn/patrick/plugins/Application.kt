@@ -1,11 +1,7 @@
 package vn.patrick.plugins
 
-import io.ktor.network.tls.certificates.*
 import io.ktor.server.application.*
-import io.ktor.server.engine.*
 import io.ktor.server.netty.*
-import org.slf4j.LoggerFactory
-import java.io.File
 
 fun main(args: Array<String>): Unit = EngineMain.main(args)
 

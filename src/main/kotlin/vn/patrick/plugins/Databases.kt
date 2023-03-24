@@ -15,10 +15,13 @@ fun Application.configureDatabases() {
     val secret = environment.config.property("jwt.secret").getString()
     val issuer = environment.config.property("jwt.issuer").getString()
     val audience = environment.config.property("jwt.audience").getString()
+    val driverClassName = environment.config.property("storage.driverClassName").getString()
+    val jdbcURL = environment.config.property("storage.jdbcURL").getString()
     val database = Database.connect(
-            url = "jdbc:h2:file:./data/h2db;DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
+            url = jdbcURL,
+            driver = driverClassName
     )
+
     val userService = UserService(database)
     val questionService = QuestionService(database)
     routing {
