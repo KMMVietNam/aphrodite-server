@@ -2,38 +2,34 @@ package vn.patrick.plugins
 
 import io.ktor.server.application.*
 import io.ktor.server.netty.*
+import org.jetbrains.exposed.sql.Database
 
 fun main(args: Array<String>): Unit = EngineMain.main(args)
 
-/*val keyStoreFile = File("build/keystore.jks")
-    val keyStore = buildKeyStore {
-        certificate("sampleAlias") {
-            password = "foobar"
-            domains = listOf("127.0.0.1", "0.0.0.0", "localhost")
-        }
-    }
-    keyStore.saveToFile(keyStoreFile, "123456")
-    val environment = applicationEngineEnvironment {
-        log = LoggerFactory.getLogger("ktor.application")
-        connector {
-            port = 8080
-        }
-        sslConnector(
-            keyStore = keyStore,
-            keyAlias = "sampleAlias",
-            keyStorePassword = { "123456".toCharArray() },
-            privateKeyPassword = { "foobar".toCharArray() }) {
-            port = 8443
-            keyStorePath = keyStoreFile
-        }
-        module(Application::module)
-    }
-    embeddedServer(Netty, environment = environment)
-        .start(wait = true)*/
 
 fun Application.module() {
+    val secret = environment.config.property("jwt.secret").getString()
+    val issuer = environment.config.property("jwt.issuer").getString()
+    val audience = environment.config.property("jwt.audience").getString()
+    val driverClassName = environment.config.property("storage.driverClassName").getString()
+    val jdbcURL = environment.config.property("storage.jdbcURL").getString()
+    val database = Database.connect(
+        url = jdbcURL,
+        driver = driverClassName
+    )
+    configureWebSocket(database)
     configureAuthentication()
     configureSerialization()
-    configureDatabases()
-    configureRouting()
+    configureDatabases(
+        database,
+        audience,
+        issuer,
+        secret
+    )
+    configureRouting(
+        database,
+        audience,
+        issuer,
+        secret
+    )
 }

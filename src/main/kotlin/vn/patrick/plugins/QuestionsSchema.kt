@@ -3,37 +3,41 @@ package vn.patrick.plugins
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.javatime.CurrentDateTime
+import org.jetbrains.exposed.sql.javatime.datetime
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.transactions.transaction
 
 @Serializable
 data class Question(
     val questionContent: String,
-    val questionNumber: Int,
-    val image: String
+    val questionImage: String
 )
 
 @Serializable
 data class Answer(
-    val answerContent: String,
-    val questionNumber: Int,
+    val answerText: String,
+    val isAnswer: Boolean,
     val label: String
 )
 
 class QuestionService(private val database: Database) {
     object Questions : Table("question_table") {
         val id = integer("id").autoIncrement()
-        val questionContent = varchar("questionText", length = 5000)
-        val questionNumber = integer("questionNumber")
-        val image = varchar("contentImage", length = 5000)
+
+        @Suppress("unused")
+        val startDate = datetime("date_created").defaultExpression(CurrentDateTime)
+        val questionContent = varchar("question_text", length = 5000)
+        val questionImage = varchar("question_image", length = 5000)
         override val primaryKey = PrimaryKey(id)
     }
 
     object Answers : Table("answer_table") {
         val id = integer("id").autoIncrement()
-        val questionId = integer("questionId")
-        val answerText = varchar("answerText", length = 5000)
-        val label = varchar("label", length = 50)
+        val questionId = integer("question_id")
+        val answerText = varchar("answer_text", length = 5000)
+        val isAnswer = bool("is_answer")
+        val label = varchar("label", length = 10)
         override val primaryKey = PrimaryKey(id)
     }
 
@@ -52,20 +56,20 @@ class QuestionService(private val database: Database) {
     suspend fun <T> dbQuery(block: suspend () -> T): T =
         newSuspendedTransaction(Dispatchers.IO) { block() }
 
-    suspend fun createQuestion(question1: Question): Int = dbQuery {
+    suspend fun createQuestion(question: Question): Int = dbQuery {
         Questions.insert {
-            it[questionContent] = question1.questionContent
-            it[questionNumber] = question1.questionNumber
-            it[image] = question1.image
+            it[questionContent] = question.questionContent
+            it[questionImage] = question.questionImage
         }[Questions.id]
     }
 
-    suspend fun createAnswer(answer: Answer): Int = dbQuery {
+    suspend fun createAnswer(answer: Answer, id: Int): Int = dbQuery {
         Answers.insert {
             it[questionId] =
-                Questions.select { Questions.questionNumber eq answer.questionNumber }.single()[Questions.id]
-            it[answerText] = answer.answerContent
+                Questions.select { Questions.id eq id }.single()[Questions.id]
             it[label] = answer.label
+            it[answerText] = answer.answerText
+            it[isAnswer] = answer.isAnswer
         }[Answers.id]
     }
 
@@ -79,9 +83,34 @@ class QuestionService(private val database: Database) {
         val byContent = results.groupBy { it.questionContent }
         val list = ArrayList<QuestionResult>()
         byContent.forEach { (t, u) ->
-            list.add(QuestionResult(t, u.map { AnswerWithLabel(it.label, it.answerText) }))
+            list.add(QuestionResult(t, u.map { AnswerWithLabel(it.label, it.answerText, it.isAnswer!!) }))
         }
         Results(list)
+    }
+
+    suspend fun getQuestionByDate(): List<QuestionResult> = dbQuery {
+        val data = ArrayList<QuestionResult>()
+        Questions.join(
+            otherTable = Answers,
+            joinType = JoinType.INNER,
+            additionalConstraint = {
+                Questions.id eq Answers.questionId
+            }
+        ).selectAll().map {
+            Result(
+                it[Questions.questionContent],
+                it[Answers.label],
+                it[Answers.answerText],
+                it[Answers.isAnswer]
+            )
+        }.groupBy {
+            it.questionContent
+        }.forEach { (t, u) ->
+            data.add(QuestionResult(t, u.map {
+                AnswerWithLabel(it.label, it.answerText, it.isAnswer!!)
+            }))
+        }
+        data
     }
 }
 
@@ -89,7 +118,8 @@ class QuestionService(private val database: Database) {
 data class Result(
     val questionContent: String,
     val label: String,
-    val answerText: String
+    val answerText: String,
+    val isAnswer: Boolean? = false,
 )
 
 @Serializable
@@ -99,9 +129,15 @@ data class QuestionResult(
 )
 
 @Serializable
+data class Data(
+    val data: QuestionResult
+)
+
+@Serializable
 data class AnswerWithLabel(
     val label: String,
-    val answer: String
+    val answer: String,
+    var isAnswer: Boolean?
 )
 
 @Serializable

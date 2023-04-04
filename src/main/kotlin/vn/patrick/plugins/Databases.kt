@@ -11,19 +11,15 @@ import io.ktor.server.routing.*
 import java.lang.Exception
 import java.util.*
 
-fun Application.configureDatabases() {
-    val secret = environment.config.property("jwt.secret").getString()
-    val issuer = environment.config.property("jwt.issuer").getString()
-    val audience = environment.config.property("jwt.audience").getString()
-    val driverClassName = environment.config.property("storage.driverClassName").getString()
-    val jdbcURL = environment.config.property("storage.jdbcURL").getString()
-    val database = Database.connect(
-            url = jdbcURL,
-            driver = driverClassName
-    )
-
+fun Application.configureDatabases(
+    database: Database,
+    audience: String,
+    issuer: String,
+    secret: String
+) {
     val userService = UserService(database)
     val questionService = QuestionService(database)
+
     routing {
         // Create user
         post("/users") {
@@ -50,26 +46,6 @@ fun Application.configureDatabases() {
             }
         }
 
-        post("/question") {
-            val question = call.receive<Question>()
-            try {
-                questionService.createQuestion(question)
-                call.respond(HttpStatusCode.Created, "Created Question")
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.InternalServerError, "Error")
-            }
-        }
-
-        post("/answer") {
-            val answer = call.receive<Answer>()
-            try {
-                questionService.createAnswer(answer)
-                call.respond(HttpStatusCode.Created, "Created Answer")
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.InternalServerError, "Error")
-            }
-        }
-
         get("/questions") {
             try {
                 val result = questionService.getAll()
@@ -81,27 +57,3 @@ fun Application.configureDatabases() {
 
     }
 }
-
-/*// Read user
-        get("/users/{id}") {
-            val id = call.parameters["id"]?.toInt() ?: throw IllegalArgumentException("Invalid ID")
-            val user = userService.read(id)
-            if (user != null) {
-                call.respond(HttpStatusCode.OK, user)
-            } else {
-                call.respond(HttpStatusCode.NotFound)
-            }
-        }
-        // Update user
-        put("/users/{id}") {
-            val id = call.parameters["id"]?.toInt() ?: throw IllegalArgumentException("Invalid ID")
-            val user = call.receive<User>()
-            userService.update(id, user)
-            call.respond(HttpStatusCode.OK)
-        }
-        // Delete user
-        delete("/users/{id}") {
-            val id = call.parameters["id"]?.toInt() ?: throw IllegalArgumentException("Invalid ID")
-            userService.delete(id)
-            call.respond(HttpStatusCode.OK)
-        }*/
