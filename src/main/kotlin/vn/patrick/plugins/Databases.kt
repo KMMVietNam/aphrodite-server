@@ -38,7 +38,7 @@ fun Application.configureDatabases(
                     .withAudience(audience)
                     .withIssuer(issuer)
                     .withClaim("username", user.name)
-                    .withExpiresAt(Date(System.currentTimeMillis() + 60000))
+                    .withExpiresAt(Date(System.currentTimeMillis() + 80000000))
                     .sign(Algorithm.HMAC256(secret))
                 call.respond(hashMapOf("token" to token))
             } else {

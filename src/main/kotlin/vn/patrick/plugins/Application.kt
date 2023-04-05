@@ -17,8 +17,8 @@ fun Application.module() {
         url = jdbcURL,
         driver = driverClassName
     )
-    configureWebSocket(database)
     configureAuthentication()
+    configureWebSocket(database)
     configureSerialization()
     configureDatabases(
         database,
