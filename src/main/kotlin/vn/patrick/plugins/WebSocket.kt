@@ -7,6 +7,10 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
@@ -37,6 +41,7 @@ fun Application.configureWebSocket(database: Database) {
                 val user = userService.search(username)
                 if (user != null) {
                     val thisConnection = Connection(this)
+                    val thisConnection2 = Connection(this)
                     connections += thisConnection
                     try {
                         send("Welcome $username to room! There are ${connections.count()} users here.")
@@ -59,41 +64,61 @@ fun Application.configureWebSocket(database: Database) {
                                     } else if (currentId >= questionList!!.size - 1) {
                                         currentId = -1
                                         val question = questionList!![++currentId].copy()
-                                        connections.forEach {
-                                            it.session.sendSerialized(
-                                                Data(question)
+                                        this@configureWebSocket.log.debug("Gửi câu hỏi")
+                                        launch {
+                                            sendQuestion(
+                                                connections,
+                                                question,
+                                                answerList!!,
+                                                currentId
                                             )
                                         }
+
                                     } else {
                                         val question = questionList!![++currentId].copy()
-                                        connections.forEach {
-                                            it.session.sendSerialized(
-                                                Data(question)
+                                        this@configureWebSocket.log.debug("Gửi câu hỏi")
+                                        launch {
+                                            sendQuestion(
+                                                connections,
+                                                question,
+                                                answerList!!,
+                                                currentId
                                             )
                                         }
                                     }
                                 }
                                 receivedText.contains("currentid") -> {
-                                    thisConnection.session.send(currentId.toString())
+                                    thisConnection2.session.send(currentId.toString())
                                 }
                                 receivedText.contains("listlength") -> {
-                                    thisConnection.session.send(questionList!!.size.toString())
+                                    this@configureWebSocket.log.debug("Độ dài của list:" + questionList!!.size.toString())
+                                    thisConnection2.session.send(questionList!!.size.toString())
+                                }
+                                receivedText.contains("timer") -> {
+                                    for(i in 0..25){
+                                        connections.forEach {
+                                            it.session.send(i.toString())
+                                        }
+                                        delay(1000)
+                                    }
                                 }
                                 receivedText.contains("answer:") -> {
-                                    if (questionList == null) {
-                                        thisConnection.session.send("Trận chiến chưa bắt đầu")
-                                    } else {
-                                        val answer = receivedText.substringAfter("answer:")
-                                        val result = questionList!![currentId].answer.single { it.label == answer }
-                                        var isTrue = false
-                                        if (result.isAnswer!!) {
-                                            isTrue = true
-                                            thisConnection.session.send("Bạn trả lời đúng")
+                                    withContext(Dispatchers.IO) {
+                                        if (questionList == null) {
+                                            thisConnection.session.send("Trận chiến chưa bắt đầu")
                                         } else {
-                                            isTrue = false
-                                            thisConnection.session.send("Bạn trả lời sai")
+                                            val answer = receivedText.substringAfter("answer:")
+                                            val result = questionList!![currentId].answer.single { it.label == answer }
+                                            var isTrue = false
+                                            if (result.isAnswer!!) {
+                                                isTrue = true
+                                                thisConnection.session.send("Bạn trả lời đúng")
+                                            } else {
+                                                isTrue = false
+                                                thisConnection.session.send("Bạn trả lời sai")
+                                            }
+                                            answerList!![currentId]!!.answer.add(UserAndAnswer(username, isTrue))
                                         }
-                                        answerList!![currentId]!!.answer.add(UserAndAnswer(username, isTrue))
                                     }
                                 }
                                 receivedText.contains("showresult") -> {
@@ -117,6 +142,30 @@ fun Application.configureWebSocket(database: Database) {
             }
         }
 
+    }
+}
+
+private suspend fun sendQuestion(
+    connections: Set<Connection>,
+    question: QuestionResult,
+    answerList: List<AnswerSocket?>,
+    currentId: Int
+) {
+    connections.forEach {
+        it.session.sendSerialized(
+            Data(question)
+        )
+    }
+    for (i in 0..30) {
+        connections.forEach {
+            it.session.send(i.toString())
+        }
+        delay(1000)
+    }
+    connections.forEach {
+        it.session.sendSerialized(
+            answerList[currentId]
+        )
     }
 }
 
