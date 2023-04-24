@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import java.time.Duration
+import java.time.LocalDateTime
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.ArrayList
@@ -38,13 +39,14 @@ fun Application.configureWebSocket(database: Database) {
             webSocket("/room") {
                 val principal = call.principal<JWTPrincipal>()
                 val username = principal!!.payload.getClaim("username").asString()
+                val userid = principal!!.payload.getClaim("userid").asInt()
                 val user = userService.search(username)
                 if (user != null) {
                     val thisConnection = Connection(this)
                     val thisConnection2 = Connection(this)
                     connections += thisConnection
                     try {
-                        send("Welcome $username to room! There are ${connections.count()} users here.")
+                        sendSerialized(DataText(result = "Welcome $username to room! There are ${connections.count()} users here."))
                         for (frame in incoming) {
                             frame as? Frame.Text ?: continue
                             val receivedText = frame.readText()
@@ -53,13 +55,13 @@ fun Application.configureWebSocket(database: Database) {
                                     questionList = questionService.getQuestionByDate()
                                     answerList = List(questionList!!.size) { AnswerSocket(answer = arrayListOf()) }
                                     connections.forEach {
-                                        it.session.send("Welcome Admin")
+                                        it.session.sendSerialized(DataText(result = "Welcome Admin"))
                                     }
                                 }
                                 receivedText.contains("next") -> {
                                     if (questionList == null) {
                                         connections.forEach {
-                                            it.session.send("Please start before return question")
+                                            it.session.sendSerialized(DataText(result = "Please start before return question"))
                                         }
                                     } else if (currentId >= questionList!!.size - 1) {
                                         currentId = -1
@@ -88,36 +90,42 @@ fun Application.configureWebSocket(database: Database) {
                                     }
                                 }
                                 receivedText.contains("currentid") -> {
-                                    thisConnection2.session.send(currentId.toString())
+                                    thisConnection2.session.sendSerialized(DataText(result = currentId.toString()))
                                 }
                                 receivedText.contains("listlength") -> {
                                     this@configureWebSocket.log.debug("Độ dài của list:" + questionList!!.size.toString())
-                                    thisConnection2.session.send(questionList!!.size.toString())
+                                    thisConnection2.session.sendSerialized(DataText(result = questionList!!.size.toString()))
                                 }
                                 receivedText.contains("timer") -> {
                                     for(i in 0..25){
                                         connections.forEach {
-                                            it.session.send(i.toString())
+                                            it.session.sendSerialized(DataText(progress = i.toString()))
                                         }
                                         delay(1000)
                                     }
                                 }
                                 receivedText.contains("answer:") -> {
+                                    val time = LocalDateTime.now().toString()
                                     withContext(Dispatchers.IO) {
                                         if (questionList == null) {
-                                            thisConnection.session.send("Trận chiến chưa bắt đầu")
+                                            thisConnection.session.sendSerialized(DataText(result ="Trận chiến chưa bắt đầu"))
                                         } else {
                                             val answer = receivedText.substringAfter("answer:")
                                             val result = questionList!![currentId].answer.single { it.label == answer }
                                             var isTrue = false
                                             if (result.isAnswer!!) {
                                                 isTrue = true
-                                                thisConnection.session.send("Bạn trả lời đúng")
+                                                thisConnection.session.sendSerialized(DataText(result ="Bạn trả lời đúng"))
                                             } else {
                                                 isTrue = false
-                                                thisConnection.session.send("Bạn trả lời sai")
+                                                thisConnection.session.sendSerialized(DataText(result ="Bạn trả lời sai"))
                                             }
-                                            answerList!![currentId]!!.answer.add(UserAndAnswer(username, isTrue))
+                                            val userDB = userService.read(userid)
+                                            answerList!![currentId]!!.answer.add(UserAndAnswer(
+                                                userDB?.name,
+                                                userDB?.avatar,
+                                                time,
+                                                isTrue))
                                         }
                                     }
                                 }
@@ -158,7 +166,7 @@ private suspend fun sendQuestion(
     }
     for (i in 0..30) {
         connections.forEach {
-            it.session.send(i.toString())
+            it.session.sendSerialized(DataText(progress = i.toString()))
         }
         delay(1000)
     }
@@ -184,6 +192,8 @@ data class AnswerSocket(
 
 @Serializable
 data class UserAndAnswer(
-    val userName: String,
+    val userName: String?,
+    val userAvatar: String?,
+    val time: String?,
     val answer: Boolean,
 )

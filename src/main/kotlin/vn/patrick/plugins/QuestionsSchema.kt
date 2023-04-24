@@ -130,7 +130,13 @@ data class QuestionResult(
 
 @Serializable
 data class Data(
-    val data: QuestionResult
+    val data: QuestionResult?
+)
+
+@Serializable
+data class DataText(
+    val result: String? = null,
+    val progress: String? = null
 )
 
 @Serializable

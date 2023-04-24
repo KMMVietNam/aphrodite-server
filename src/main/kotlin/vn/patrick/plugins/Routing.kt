@@ -9,7 +9,7 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.Database
-import java.lang.Exception
+import kotlin.Exception
 
 @Serializable
 data class QuestionRequest(
@@ -25,6 +25,7 @@ fun Application.configureRouting(
     secret: String
 ) {
     val questionService = QuestionService(database)
+    val userService = UserService(database)
     routing {
         get("/") {
             call.respondText("Hello World!")
@@ -53,6 +54,21 @@ fun Application.configureRouting(
                 call.respond(HttpStatusCode.Created, "Created Question")
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.InternalServerError, "Error")
+            }
+        }
+
+        authenticate("auth-jwt") {
+            post("/userprofile") {
+                val principal = call.principal<JWTPrincipal>()
+                val userid = principal!!.payload.getClaim("userid").asInt()
+                try {
+                    val userProfile = call.receive<UserProfile>()
+                    userService.updateUserProfile(userid, userProfile)
+                    call.respond(HttpStatusCode.Created, "Update user success")
+                } catch (e: Exception) {
+                    this@configureRouting.log.debug("Error" + e.printStackTrace().toString())
+                    call.respond(HttpStatusCode.InternalServerError, "Error")
+                }
             }
         }
     }

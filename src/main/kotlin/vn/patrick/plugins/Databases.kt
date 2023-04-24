@@ -38,6 +38,7 @@ fun Application.configureDatabases(
                     .withAudience(audience)
                     .withIssuer(issuer)
                     .withClaim("username", user.name)
+                    .withClaim("userid", userDB.id)
                     .withExpiresAt(Date(System.currentTimeMillis() + 80000000))
                     .sign(Algorithm.HMAC256(secret))
                 call.respond(hashMapOf("token" to token))
@@ -54,6 +55,5 @@ fun Application.configureDatabases(
                 call.respond(HttpStatusCode.InternalServerError, "Error")
             }
         }
-
     }
 }

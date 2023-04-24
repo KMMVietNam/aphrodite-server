@@ -10,13 +10,22 @@ import org.jetbrains.exposed.sql.*
 @Serializable
 data class User(
     val name: String,
-    val password: Int
+    val password: Int,
+    val id: Int? = null,
+    val avatar: String? = null
+)
+
+@Serializable
+data class UserProfile(
+    val name: String? = null,
+    val avatar: String? = null
 )
 
 class UserService(private val database: Database) {
     object Users : Table("user_table") {
         val id = integer("id").autoIncrement()
         val name = varchar("name", length = 50)
+        val avatar = varchar("avatar", length = 1000).nullable()
         val password = integer("password")
         override val primaryKey = PrimaryKey(id)
     }
@@ -40,7 +49,7 @@ class UserService(private val database: Database) {
     suspend fun read(id: Int): User? {
         return dbQuery {
             Users.select { Users.id eq id }
-                .map { User(it[Users.name], it[Users.password]) }
+                .map { User(it[Users.name], it[Users.password], avatar = it[Users.avatar]) }
                 .singleOrNull()
         }
     }
@@ -48,16 +57,20 @@ class UserService(private val database: Database) {
     suspend fun search(name: String): User? {
         return dbQuery {
             Users.select { Users.name eq name }
-                .map { User(it[Users.name], it[Users.password]) }
+                .map { User(it[Users.name], it[Users.password], it[Users.id]) }
                 .singleOrNull()
         }
     }
 
-    suspend fun update(id: Int, user: User) {
+    suspend fun updateUserProfile(id: Int, user: UserProfile) {
         dbQuery {
-            Users.update({ Users.id eq id }) {
-                it[name] = user.name
-                it[password] = user.password
+            Users.update({ Users.id eq id }) {userDb ->
+                user.name?.let {
+                    userDb[name] = it
+                }
+                user.avatar?.let {
+                    userDb[avatar] = it
+                }
             }
         }
     }
