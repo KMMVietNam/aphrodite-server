@@ -39,7 +39,7 @@ fun Application.configureWebSocket(database: Database) {
             webSocket("/room") {
                 val principal = call.principal<JWTPrincipal>()
                 val username = principal!!.payload.getClaim("username").asString()
-                val userid = principal!!.payload.getClaim("userid").asInt()
+                val userid = principal.payload.getClaim("userid").asInt()
                 val user = userService.search(username)
                 if (user != null) {
                     val thisConnection = Connection(this)
@@ -130,7 +130,10 @@ fun Application.configureWebSocket(database: Database) {
                                     }
                                 }
                                 receivedText.contains("showresult") -> {
-                                    thisConnection.session.sendSerialized(answerList!![currentId])
+                                    thisConnection.session.sendSerialized(sortUserRankPerQuestion(answerList!![currentId]))
+                                }
+                                receivedText.contains("showtotalresult") -> {
+                                    thisConnection.session.sendSerialized(sortUserTotalRankAtCurrentQuestion(answerList))
                                 }
                             }
                         }
@@ -172,9 +175,40 @@ private suspend fun sendQuestion(
     }
     connections.forEach {
         it.session.sendSerialized(
-            answerList[currentId]
+            sortUserRankPerQuestion(answerList[currentId])
         )
     }
+}
+
+private fun sortUserRankPerQuestion(answer: AnswerSocket?): AnswerSocket? {
+    return if (answer != null) {
+        val sortedAnswers = answer.answer.sortedWith(
+            compareByDescending<UserAndAnswer> { it.answer }
+                .thenBy { it.time }
+        )
+        answer.copy(answer = ArrayList(sortedAnswers))
+    } else {
+        null
+    }
+}
+
+private fun sortUserTotalRankAtCurrentQuestion(answer: List<AnswerSocket?>?): List<AnswerSocket?>? {
+    answer?.forEachIndexed { _, item ->
+        item?.answer?.sortedWith(compareByDescending<UserAndAnswer> { it.answer }.thenBy { it.time })
+
+        item?.answer?.forEachIndexed { index, userAndAnswer ->
+            if (userAndAnswer.answer) {
+                userAndAnswer.point = when (index) {
+                    0 -> 3
+                    1 -> 2
+                    else -> 1
+                }
+            } else {
+                userAndAnswer.point = 0
+            }
+        }
+    }
+    return answer
 }
 
 class Connection(val session: DefaultWebSocketServerSession) {
@@ -196,4 +230,5 @@ data class UserAndAnswer(
     val userAvatar: String?,
     val time: String?,
     val answer: Boolean,
+    var point: Int = 0
 )
